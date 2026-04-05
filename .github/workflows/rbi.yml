@@ -1,34 +1,30 @@
-name: RBI Exchange Rate Update
+name: RBI Selenium
 
 on:
   schedule:
-    - cron: "0 10 * * *"   # 3:30 PM IST
+    - cron: "0 10 * * *"
   workflow_dispatch:
 
 jobs:
-  update:
+  run:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: browser-actions/setup-chrome@v1
+
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          pip install pandas requests lxml html5lib openpyxl
+      - run: pip install selenium pandas lxml html5lib openpyxl
 
-      - name: Run script
-        run: python rate.py
+      - run: python rate.py
 
-      - name: Commit updated file
-        run: |
+      - run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add Exchange Rate.xlsx
-          git commit -m "Update RBI rates" || echo "No changes"
+          git commit -m "update" || echo "no changes"
           git push
