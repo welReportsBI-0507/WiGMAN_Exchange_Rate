@@ -5,9 +5,6 @@ on:
     - cron: "0 10 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -33,6 +30,6 @@ jobs:
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          git add "Exchange Rate.csv"
+          git add "Exchange Rate.xlsx"
           git commit -m "Update RBI rates" || echo "No changes"
           git push
