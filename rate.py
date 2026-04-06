@@ -5,18 +5,23 @@ from io import StringIO
 import os
 
 # ================= CONFIG =================
-MASTER_FILE = "Exchange Rate.xlsx"
+MASTER_FILE = "Exchange Rate.csv"
 TAIL_DAYS = 15
+
 
 # ================= LOAD MASTER =================
 if os.path.exists(MASTER_FILE):
-    df = pd.read_excel(MASTER_FILE)
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    df = df.dropna(subset=['Date'])
+    df = pd.read_csv(MASTER_FILE)
+
+    if 'Date' in df.columns:
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        df = df.dropna(subset=['Date'])
+
     print("Master file loaded")
 else:
     df = pd.DataFrame()
     print("No master file found, starting fresh")
+
 
 # ================= DATE RANGE =================
 if not df.empty:
@@ -94,7 +99,7 @@ combined_df = pd.concat([df, new_df], ignore_index=True)
 combined_df = combined_df.drop_duplicates(subset=['Date'], keep='last')
 
 
-# ================= CARRY FORWARD (TAIL ONLY) =================
+# ================= CARRY FORWARD =================
 if not combined_df.empty:
     combined_df = combined_df.sort_values('Date')
 
@@ -103,24 +108,26 @@ if not combined_df.empty:
     old = combined_df[combined_df['Date'] < cutoff]
     recent = combined_df[combined_df['Date'] >= cutoff]
 
-    recent = recent.set_index('Date')
+    if not recent.empty:
+        recent = recent.set_index('Date')
 
-    full_range = pd.date_range(
-        start=recent.index.min(),
-        end=recent.index.max(),
-        freq='D'
-    )
+        full_range = pd.date_range(
+            start=recent.index.min(),
+            end=recent.index.max(),
+            freq='D'
+        )
 
-    recent = recent.reindex(full_range).ffill()
-    recent = recent.reset_index().rename(columns={'index': 'Date'})
+        recent = recent.reindex(full_range).ffill()
+        recent = recent.reset_index().rename(columns={'index': 'Date'})
 
-    combined_df = pd.concat([old, recent], ignore_index=True)
+        combined_df = pd.concat([old, recent], ignore_index=True)
 
     print("Carry forward applied")
 
 
 # ================= SAVE =================
 combined_df['Date'] = combined_df['Date'].dt.strftime('%d/%m/%Y')
-combined_df.to_excel(MASTER_FILE, index=False)
 
-print("Done - file updated")
+combined_df.to_csv(MASTER_FILE, index=False)
+
+print("Done - CSV updated")
