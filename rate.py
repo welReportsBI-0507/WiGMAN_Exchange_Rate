@@ -5,18 +5,24 @@ from io import StringIO
 import os
 
 # ================= CONFIG =================
-MASTER_FILE = "Exchange Rate.xlsx"
-TAIL_DAYS = 15
+MASTER_FILE = "Exchange Rate.csv"
 
-# ================= LOAD MASTER =================
+
+# ================= LOAD INPUT CSV =================
 if os.path.exists(MASTER_FILE):
-    df = pd.read_excel(MASTER_FILE)
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    df = df.dropna(subset=['Date'])
-    print("Master file loaded")
+    df = pd.read_csv(MASTER_FILE)
+
+    if not df.empty and 'Date' in df.columns:
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        df = df.dropna(subset=['Date'])
+    else:
+        df = pd.DataFrame()
+
+    print("Input CSV loaded")
 else:
     df = pd.DataFrame()
-    print("No master file found, starting fresh")
+    print("No CSV found, starting fresh")
+
 
 # ================= DATE RANGE =================
 if not df.empty:
@@ -47,9 +53,6 @@ with sync_playwright() as p:
 
         from.value = args.fromDate;
         to.value = args.toDate;
-
-        from.dispatchEvent(new Event('change'));
-        to.dispatchEvent(new Event('change'));
     }
     """, {
         "fromDate": from_date,
@@ -66,20 +69,18 @@ with sync_playwright() as p:
 # ================= PARSE =================
 tables = pd.read_html(StringIO(html))
 
-if len(tables) < 3:
-    print("No new data (weekend/holiday)")
-    new_df = pd.DataFrame()
-else:
+if len(tables) >= 3:
     new_df = tables[2].copy()
 
     new_df.columns = new_df.iloc[0]
     new_df = new_df.iloc[1:].reset_index(drop=True)
-    new_df.columns = [str(col).strip() for col in new_df.columns]
 
-    date_series = new_df.iloc[:, 0]
+    new_df.columns = [str(c).strip() for c in new_df.columns]
+
+    new_df = new_df[new_df.iloc[:, 0] != "Date"]
 
     new_df['Date'] = pd.to_datetime(
-        date_series.astype(str).str.strip(),
+        new_df.iloc[:, 0].astype(str).str.strip(),
         format="%d/%m/%Y",
         errors='coerce'
     )
@@ -88,39 +89,42 @@ else:
 
     print("Rows fetched:", len(new_df))
 
+else:
+    print("No new data (weekend/holiday)")
+    new_df = pd.DataFrame()
+
 
 # ================= APPEND =================
-combined_df = pd.concat([df, new_df], ignore_index=True)
-combined_df = combined_df.drop_duplicates(subset=['Date'], keep='last')
+if df.empty:
+    combined_df = new_df.copy()
+else:
+    combined_df = pd.concat([df, new_df], ignore_index=True)
+    combined_df = combined_df.drop_duplicates(subset=['Date'], keep='last')
 
 
-# ================= CARRY FORWARD (TAIL ONLY) =================
+# ================= FULL CARRY FORWARD =================
 if not combined_df.empty:
+
     combined_df = combined_df.sort_values('Date')
 
-    cutoff = combined_df['Date'].max() - pd.Timedelta(days=TAIL_DAYS)
-
-    old = combined_df[combined_df['Date'] < cutoff]
-    recent = combined_df[combined_df['Date'] >= cutoff]
-
-    recent = recent.set_index('Date')
+    combined_df = combined_df.set_index('Date')
 
     full_range = pd.date_range(
-        start=recent.index.min(),
-        end=recent.index.max(),
+        start=combined_df.index.min(),
+        end=combined_df.index.max(),
         freq='D'
     )
 
-    recent = recent.reindex(full_range).ffill()
-    recent = recent.reset_index().rename(columns={'index': 'Date'})
+    combined_df = combined_df.reindex(full_range).ffill()
 
-    combined_df = pd.concat([old, recent], ignore_index=True)
+    combined_df = combined_df.reset_index().rename(columns={'index': 'Date'})
 
-    print("Carry forward applied")
+    print("Full carry forward applied")
 
 
 # ================= SAVE =================
 combined_df['Date'] = combined_df['Date'].dt.strftime('%d/%m/%Y')
-combined_df.to_excel(MASTER_FILE, index=False)
 
-print("Done - file updated")
+combined_df.to_csv(MASTER_FILE, index=False)
+
+print("Done - CSV updated")
