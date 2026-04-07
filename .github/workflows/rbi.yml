@@ -2,8 +2,11 @@ name: RBI Exchange Rate
 
 on:
   schedule:
-    - cron: "0 10 * * *"
+    - cron: "0 10 * * *"   # 3:30 PM IST
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run:
@@ -20,16 +23,19 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install playwright pandas lxml html5lib openpyxl
+          pip install playwright pandas lxml html5lib
+
+      - name: Install browser
+        run: |
           python -m playwright install --with-deps
 
       - name: Run script
         run: python rate.py
 
-      - name: Commit updated file
+      - name: Commit updated CSV
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          git add "Exchange Rate.xlsx"
+          git add "Exchange Rate.csv"
           git commit -m "Update RBI rates" || echo "No changes"
           git push
