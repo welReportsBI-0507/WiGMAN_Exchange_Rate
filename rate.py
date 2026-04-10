@@ -15,7 +15,7 @@ if os.path.exists(MASTER_FILE):
     if not df.empty and 'Date' in df.columns:
         df['Date'] = pd.to_datetime(
             df['Date'],
-            dayfirst=True,   # 🔥 CRITICAL FIX
+            dayfirst=True,  
             errors='coerce'
         )
         df = df.dropna(subset=['Date'])
