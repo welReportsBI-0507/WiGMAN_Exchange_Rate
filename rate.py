@@ -12,13 +12,13 @@ MASTER_FILE = "Exchange Rate.csv"
 if os.path.exists(MASTER_FILE):
     df = pd.read_csv(MASTER_FILE)
 
-    if not df.empty and 'Date' in df.columns:
-        df['Date'] = pd.to_datetime(
-            df['Date'],
-            dayfirst=True,  
-            errors='coerce'
+    if not df.empty and "Date" in df.columns:
+        df["Date"] = pd.to_datetime(
+            df["Date"],
+            dayfirst=True,
+            errors="coerce"
         )
-        df = df.dropna(subset=['Date'])
+        df = df.dropna(subset=["Date"])
     else:
         df = pd.DataFrame()
 
@@ -30,7 +30,7 @@ else:
 
 # ================= DATE RANGE =================
 if not df.empty:
-    last_date = df['Date'].max()
+    last_date = df["Date"].max()
 else:
     last_date = datetime.now() - timedelta(days=30)
 
@@ -73,28 +73,43 @@ with sync_playwright() as p:
 # ================= PARSE =================
 tables = pd.read_html(StringIO(html))
 
-if len(tables) >= 3:
-    new_df = tables[2].copy()
+new_df = pd.DataFrame()
 
-    new_df.columns = new_df.iloc[0]
-    new_df = new_df.iloc[1:].reset_index(drop=True)
+for table in tables:
+    temp = table.copy()
 
-    new_df.columns = [str(c).strip() for c in new_df.columns]
+    if temp.empty:
+        continue
 
-    new_df = new_df[new_df.iloc[:, 0] != "Date"]
+    possible_headers = [
+        str(c).strip().lower()
+        for c in temp.iloc[0].tolist()
+    ]
 
-    new_df['Date'] = pd.to_datetime(
-        new_df.iloc[:, 0].astype(str).str.strip(),
+    if "date" in possible_headers:
+        temp.columns = temp.iloc[0]
+        temp = temp.iloc[1:].reset_index(drop=True)
+        temp.columns = [str(c).strip() for c in temp.columns]
+
+        if "Date" in temp.columns:
+            new_df = temp
+            break
+
+if not new_df.empty:
+    new_df = new_df[new_df["Date"].astype(str).str.strip() != "Date"]
+
+    new_df["Date"] = pd.to_datetime(
+        new_df["Date"].astype(str).str.strip(),
         format="%d/%m/%Y",
-        errors='coerce'
+        errors="coerce"
     )
 
-    new_df = new_df.dropna(subset=['Date'])
+    new_df = new_df.dropna(subset=["Date"])
 
     print("Rows fetched:", len(new_df))
 
 else:
-    print("No new data (weekend/holiday)")
+    print("No new data table found")
     new_df = pd.DataFrame()
 
 
@@ -103,31 +118,30 @@ if df.empty:
     combined_df = new_df.copy()
 else:
     combined_df = pd.concat([df, new_df], ignore_index=True)
-    combined_df = combined_df.drop_duplicates(subset=['Date'], keep='last')
+    combined_df = combined_df.drop_duplicates(subset=["Date"], keep="last")
 
 
 # ================= FULL CARRY FORWARD =================
 if not combined_df.empty:
+    combined_df = combined_df.sort_values("Date")
 
-    combined_df = combined_df.sort_values('Date')
-
-    combined_df = combined_df.set_index('Date')
+    combined_df = combined_df.set_index("Date")
 
     full_range = pd.date_range(
         start=combined_df.index.min(),
         end=combined_df.index.max(),
-        freq='D'
+        freq="D"
     )
 
     combined_df = combined_df.reindex(full_range).ffill()
 
-    combined_df = combined_df.reset_index().rename(columns={'index': 'Date'})
+    combined_df = combined_df.reset_index().rename(columns={"index": "Date"})
 
     print("Full carry forward applied")
 
 
 # ================= SAVE =================
-combined_df['Date'] = combined_df['Date'].dt.strftime('%d/%m/%Y')
+combined_df["Date"] = combined_df["Date"].dt.strftime("%d/%m/%Y")
 
 combined_df.to_csv(MASTER_FILE, index=False)
 
